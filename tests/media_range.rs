@@ -1,7 +1,7 @@
 // Released under the MIT License.
 // Copyright, 2026, by Samuel Williams.
 
-use base_web_media_type::{Error, MediaRange, MediaType};
+use base_web_media_type::{MediaRange, MediaType, MediaTypeError};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -82,7 +82,7 @@ fn follows_the_rfc_9110_grammar() {
     ] {
         assert_eq!(
             MediaRange::parse(invalid),
-            Err(Error::Syntax),
+            Err(MediaTypeError::Syntax),
             "{invalid:?}"
         );
     }
@@ -93,14 +93,14 @@ fn follows_the_rfc_9110_grammar() {
     ] {
         assert_eq!(
             MediaRange::parse(control),
-            Err(Error::ParameterValue),
+            Err(MediaTypeError::ParameterValue),
             "{control:?}"
         );
     }
-    assert_eq!(MediaRange::parse("*/json"), Err(Error::Wildcard));
+    assert_eq!(MediaRange::parse("*/json"), Err(MediaTypeError::Wildcard));
     assert_eq!(
         MediaRange::parse("text/plain; a=1; A=2"),
-        Err(Error::DuplicateParameter)
+        Err(MediaTypeError::DuplicateParameter)
     );
 }
 
@@ -137,20 +137,23 @@ fn builds_ranges_and_parameters() {
         built.without_parameters(),
         MediaRange::from_static("text/*")
     );
-    assert_eq!(MediaRange::new("*", "json"), Err(Error::Wildcard));
-    assert_eq!(MediaRange::new("te xt", "plain"), Err(Error::Syntax));
-    assert_eq!(MediaRange::new("text", ""), Err(Error::Syntax));
+    assert_eq!(MediaRange::new("*", "json"), Err(MediaTypeError::Wildcard));
+    assert_eq!(
+        MediaRange::new("te xt", "plain"),
+        Err(MediaTypeError::Syntax)
+    );
+    assert_eq!(MediaRange::new("text", ""), Err(MediaTypeError::Syntax));
     assert_eq!(
         built.clone().with_parameter("bad name", "x"),
-        Err(Error::Syntax)
+        Err(MediaTypeError::Syntax)
     );
     assert_eq!(
         built.clone().with_parameter("format", "again"),
-        Err(Error::DuplicateParameter)
+        Err(MediaTypeError::DuplicateParameter)
     );
     assert_eq!(
         built.with_parameter("line", "a\nb"),
-        Err(Error::ParameterValue)
+        Err(MediaTypeError::ParameterValue)
     );
 }
 
@@ -239,22 +242,45 @@ fn the_number_of_parameters_is_limited() {
             .map(|index| format!("; p{index}=v"))
             .collect::<String>()
     };
-    let at_limit = range(&format!("a/b{}", parameters(MediaRange::MAX_PARAMETERS)));
-    assert_eq!(at_limit.parameters().len(), MediaRange::MAX_PARAMETERS);
+    let at_limit = range(&format!(
+        "a/b{}",
+        parameters(MediaRange::PARAMETER_COUNT_LIMIT)
+    ));
+    assert_eq!(
+        at_limit.parameters().len(),
+        MediaRange::PARAMETER_COUNT_LIMIT
+    );
     assert_eq!(
         MediaRange::parse(&format!(
             "a/b{}",
-            parameters(MediaRange::MAX_PARAMETERS + 1)
+            parameters(MediaRange::PARAMETER_COUNT_LIMIT + 1)
         )),
-        Err(Error::TooManyParameters)
+        Err(MediaTypeError::TooManyParameters)
     );
     // A long input stops at the limit, so the quadratic duplicate check never grows past it.
     assert_eq!(
         MediaRange::parse(&format!("a/b{}", parameters(40_000))),
-        Err(Error::TooManyParameters)
+        Err(MediaTypeError::TooManyParameters)
     );
     assert_eq!(
         at_limit.with_parameter("extra", "v"),
-        Err(Error::TooManyParameters)
+        Err(MediaTypeError::TooManyParameters)
+    );
+}
+
+#[test]
+fn debug_shows_the_written_form() {
+    assert_eq!(
+        format!("{:?}", range("Text/*; Charset=\"a b\"")),
+        "MediaRange(text/*; charset=\"a b\")"
+    );
+    assert_eq!(
+        format!(
+            "{:?}",
+            MediaType::TEXT_PLAIN
+                .with_parameter("charset", "utf-8")
+                .unwrap()
+        ),
+        "MediaType(text/plain; charset=utf-8)"
     );
 }

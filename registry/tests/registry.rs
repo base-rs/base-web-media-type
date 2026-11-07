@@ -6,16 +6,16 @@ use base_web_media_type_registry::{self as registry, ContentTransferEncoding};
 
 #[test]
 fn looks_up_types_by_name_case_insensitively() {
-    let record = registry::get("application/json").unwrap();
+    let record = registry::by_name("application/json").unwrap();
     assert_eq!(record.media_type(), &MediaType::APPLICATION_JSON);
     assert_eq!(record.encoding(), ContentTransferEncoding::EightBit);
     assert_eq!(record.extensions(), ["json", "map"]);
     assert!(std::ptr::eq(
-        registry::get("APPLICATION/Json").unwrap(),
+        registry::by_name("APPLICATION/Json").unwrap(),
         record
     ));
     // Names with uppercase letters in the source data are stored in lowercase.
-    assert!(registry::get("application/vnd.ms-excel.sheet.macroEnabled.12").is_some());
+    assert!(registry::by_name("application/vnd.ms-excel.sheet.macroEnabled.12").is_some());
     for missing in [
         "application/unknown",
         "application",
@@ -23,7 +23,7 @@ fn looks_up_types_by_name_case_insensitively() {
         "application/json; charset=utf-8",
         "zzzz/zzzz",
     ] {
-        assert!(registry::get(missing).is_none(), "{missing}");
+        assert!(registry::by_name(missing).is_none(), "{missing}");
     }
 }
 
@@ -31,28 +31,28 @@ fn looks_up_types_by_name_case_insensitively() {
 fn looks_up_parsed_media_types() {
     let parsed = MediaType::parse("text/html; charset=utf-8").unwrap();
     assert_eq!(
-        registry::for_media_type(&parsed).unwrap().media_type(),
+        registry::by_media_type(&parsed).unwrap().media_type(),
         &MediaType::TEXT_HTML
     );
-    assert!(registry::for_media_type(MediaRange::parse("text/*").unwrap()).is_none());
+    assert!(registry::by_media_type(MediaRange::parse("text/*").unwrap()).is_none());
 }
 
 #[test]
 fn looks_up_extensions_and_paths() {
     assert_eq!(
-        registry::for_extension("json").unwrap().media_type(),
+        registry::by_extension("json").unwrap().media_type(),
         &MediaType::APPLICATION_JSON
     );
     assert_eq!(
-        registry::for_extension(".JSON").unwrap().media_type(),
+        registry::by_extension(".JSON").unwrap().media_type(),
         &MediaType::APPLICATION_JSON
     );
     assert_eq!(
-        registry::for_extension("map").unwrap().media_type(),
+        registry::by_extension("map").unwrap().media_type(),
         &MediaType::APPLICATION_JSON
     );
     assert_eq!(
-        registry::for_extension("warc.gz")
+        registry::by_extension("warc.gz")
             .unwrap()
             .media_type()
             .essence(),
@@ -60,24 +60,24 @@ fn looks_up_extensions_and_paths() {
     );
     // Both cases of `Z` find the preferred compressed type.
     assert_eq!(
-        registry::for_extension("Z").unwrap().media_type(),
-        registry::for_extension("z").unwrap().media_type()
+        registry::by_extension("Z").unwrap().media_type(),
+        registry::by_extension("z").unwrap().media_type()
     );
-    assert!(registry::for_extension("no-such-extension").is_none());
-    assert!(registry::for_extension("").is_none());
+    assert!(registry::by_extension("no-such-extension").is_none());
+    assert!(registry::by_extension("").is_none());
     assert_eq!(
-        registry::for_path("site/index.HTML").unwrap().media_type(),
+        registry::by_path("site/index.HTML").unwrap().media_type(),
         &MediaType::TEXT_HTML
     );
     assert_eq!(
-        registry::for_path("archive.tar.gz")
+        registry::by_path("archive.tar.gz")
             .unwrap()
             .media_type()
             .essence(),
         "application/gzip"
     );
     for none in ["README", ".bashrc", "directory/"] {
-        assert!(registry::for_path(none).is_none(), "{none}");
+        assert!(registry::by_path(none).is_none(), "{none}");
     }
 }
 
@@ -97,7 +97,7 @@ fn common_extensions_map_to_their_usual_types() {
     ];
     for (extension, essence) in expected {
         assert_eq!(
-            registry::for_extension(extension)
+            registry::by_extension(extension)
                 .unwrap()
                 .media_type()
                 .essence(),
@@ -147,10 +147,10 @@ fn encodings_have_their_mime_names() {
         ["7bit", "8bit", "binary", "base64", "quoted-printable"]
     );
     assert_eq!(
-        registry::get("text/plain").unwrap().encoding(),
+        registry::by_name("text/plain").unwrap().encoding(),
         ContentTransferEncoding::QuotedPrintable
     );
-    assert!(format!("{:?}", registry::get("text/plain").unwrap()).contains("plain"));
+    assert!(format!("{:?}", registry::by_name("text/plain").unwrap()).contains("plain"));
 }
 
 #[cfg(unix)]
@@ -158,7 +158,7 @@ fn encodings_have_their_mime_names() {
 fn non_utf8_extensions_have_no_record() {
     use std::os::unix::ffi::OsStrExt;
     let path = std::path::Path::new(std::ffi::OsStr::from_bytes(b"file.\xff"));
-    assert!(registry::for_path(path).is_none());
+    assert!(registry::by_path(path).is_none());
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn source_extensions_with_a_leading_dot_are_normalized() {
     // The source data lists `.htaccess` with its dot; the generator stores it without one.
     for query in ["htaccess", ".htaccess"] {
         assert_eq!(
-            registry::for_extension(query).unwrap().media_type(),
+            registry::by_extension(query).unwrap().media_type(),
             &MediaType::TEXT_PLAIN,
             "{query}"
         );

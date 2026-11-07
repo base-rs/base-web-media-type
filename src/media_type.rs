@@ -1,14 +1,14 @@
 // Released under the MIT License.
 // Copyright, 2026, by Samuel Williams.
 
-use crate::{Error, MediaRange};
+use crate::{MediaRange, MediaTypeError};
 use std::fmt;
 use std::str::FromStr;
 
 /// A concrete media type, such as `text/plain; charset=utf-8`, which never contains a wildcard.
 ///
 /// A media type is a [`MediaRange`] that names exactly one type, so it converts into one, and it can be used wherever a range is accepted through `AsRef<MediaRange>`. Converting a range into a media type fails when the range has a wildcard.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct MediaType(MediaRange);
 
 impl MediaType {
@@ -51,12 +51,12 @@ impl MediaType {
     pub const TEXT_PLAIN: Self = Self::from_static("text/plain");
 
     /// Parse a media type, such as `text/plain; charset=utf-8`, using the grammar of [`MediaRange::parse`]. Wildcards are rejected.
-    pub fn parse(text: &str) -> Result<Self, Error> {
+    pub fn parse(text: &str) -> Result<Self, MediaTypeError> {
         MediaRange::parse(text)?.try_into()
     }
 
     /// A media type without parameters. Names must be tokens and are converted to lowercase; wildcards are rejected.
-    pub fn new(top_level_type: &str, subtype: &str) -> Result<Self, Error> {
+    pub fn new(top_level_type: &str, subtype: &str) -> Result<Self, MediaTypeError> {
         MediaRange::new(top_level_type, subtype)?.try_into()
     }
 
@@ -79,7 +79,7 @@ impl MediaType {
     }
 
     /// Add a parameter, as with [`MediaRange::with_parameter`].
-    pub fn with_parameter(self, name: &str, value: &str) -> Result<Self, Error> {
+    pub fn with_parameter(self, name: &str, value: &str) -> Result<Self, MediaTypeError> {
         Ok(Self(self.0.with_parameter(name, value)?))
     }
 
@@ -124,6 +124,16 @@ impl MediaType {
     }
 }
 
+impl fmt::Debug for MediaType {
+    /// Shows the media type as it would be written, such as `MediaType(text/plain; charset=utf-8)`.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("MediaType")
+            .field(&format_args!("{self}"))
+            .finish()
+    }
+}
+
 impl AsRef<MediaRange> for MediaType {
     fn as_ref(&self) -> &MediaRange {
         &self.0
@@ -137,21 +147,21 @@ impl From<MediaType> for MediaRange {
 }
 
 impl TryFrom<MediaRange> for MediaType {
-    type Error = Error;
+    type Error = MediaTypeError;
 
-    /// Fails with [`Error::Wildcard`] when the range has a wildcard type or subtype.
-    fn try_from(range: MediaRange) -> Result<Self, Error> {
+    /// Fails with [`MediaTypeError::Wildcard`] when the range has a wildcard type or subtype.
+    fn try_from(range: MediaRange) -> Result<Self, MediaTypeError> {
         if !range.is_concrete() {
-            return Err(Error::Wildcard);
+            return Err(MediaTypeError::Wildcard);
         }
         Ok(Self(range))
     }
 }
 
 impl FromStr for MediaType {
-    type Err = Error;
+    type Err = MediaTypeError;
 
-    fn from_str(text: &str) -> Result<Self, Error> {
+    fn from_str(text: &str) -> Result<Self, MediaTypeError> {
         Self::parse(text)
     }
 }

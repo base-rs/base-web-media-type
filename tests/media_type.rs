@@ -1,7 +1,7 @@
 // Released under the MIT License.
 // Copyright, 2026, by Samuel Williams.
 
-use base_web_media_type::{Error, MediaRange, MediaType};
+use base_web_media_type::{MediaRange, MediaType, MediaTypeError};
 
 #[test]
 fn parses_concrete_media_types() {
@@ -32,19 +32,26 @@ fn wildcards_and_invalid_names_are_rejected() {
     for wildcard in ["text/*", "*/*"] {
         assert_eq!(
             MediaType::parse(wildcard),
-            Err(Error::Wildcard),
+            Err(MediaTypeError::Wildcard),
             "{wildcard}"
         );
     }
     for invalid in ["text", "text/plain/extra", "text/plain; invalid"] {
-        assert_eq!(MediaType::parse(invalid), Err(Error::Syntax), "{invalid}");
+        assert_eq!(
+            MediaType::parse(invalid),
+            Err(MediaTypeError::Syntax),
+            "{invalid}"
+        );
     }
-    assert_eq!(MediaType::new("text", "*"), Err(Error::Wildcard));
-    assert_eq!(MediaType::new("te xt", "plain"), Err(Error::Syntax));
+    assert_eq!(MediaType::new("text", "*"), Err(MediaTypeError::Wildcard));
+    assert_eq!(
+        MediaType::new("te xt", "plain"),
+        Err(MediaTypeError::Syntax)
+    );
     assert_eq!(MediaType::new("TEXT", "PLAIN"), Ok(MediaType::TEXT_PLAIN));
     assert_eq!(
         MediaType::TEXT_PLAIN.with_parameter("charset", "a\u{7f}"),
-        Err(Error::ParameterValue)
+        Err(MediaTypeError::ParameterValue)
     );
     for name in ["*/*", "text/*", "Text/plain", "text"] {
         assert!(
@@ -68,7 +75,10 @@ fn media_types_are_ranges() {
     let range: MediaRange = media_type.clone().into();
     assert_eq!(range.to_string(), "text/html; charset=utf-8");
     assert_eq!(MediaType::try_from(range), Ok(media_type));
-    assert_eq!(MediaType::try_from(MediaRange::ANY), Err(Error::Wildcard));
+    assert_eq!(
+        MediaType::try_from(MediaRange::ANY),
+        Err(MediaTypeError::Wildcard)
+    );
 }
 
 #[test]
@@ -107,11 +117,11 @@ fn constants_are_valid_media_types() {
 #[test]
 fn errors_describe_the_problem() {
     let messages: Vec<String> = [
-        Error::Syntax,
-        Error::Wildcard,
-        Error::DuplicateParameter,
-        Error::ParameterValue,
-        Error::TooManyParameters,
+        MediaTypeError::Syntax,
+        MediaTypeError::Wildcard,
+        MediaTypeError::DuplicateParameter,
+        MediaTypeError::ParameterValue,
+        MediaTypeError::TooManyParameters,
     ]
     .iter()
     .map(ToString::to_string)
@@ -126,6 +136,6 @@ fn errors_describe_the_problem() {
             "too many media type parameters"
         ]
     );
-    let error: Box<dyn std::error::Error> = Box::new(Error::Syntax);
+    let error: Box<dyn std::error::Error> = Box::new(MediaTypeError::Syntax);
     assert!(error.source().is_none());
 }

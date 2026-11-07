@@ -14,23 +14,23 @@
 //! assert_eq!(media_type.essence(), "text/html");
 //! assert_eq!(media_type.parameter("Charset"), Some("utf-8"));
 //! assert!(MediaRange::parse("text/*")?.matches(&media_type));
-//! # Ok::<(), base_web_media_type::Error>(())
+//! # Ok::<(), base_web_media_type::MediaTypeError>(())
 //! ```
 //!
 //! This crate does not parse HTTP fields such as `Accept`, or order ranges by quality. Those belong to the HTTP layer, which can produce [`MediaRange`] values for these types to match.
 
-mod error;
 mod media_range;
 mod media_range_set;
 mod media_type;
+mod media_type_error;
 mod media_type_map;
 mod syntax;
 
-pub use error::Error;
 pub use media_range::MediaRange;
 pub use media_range_set::MediaRangeSet;
 pub use media_type::MediaType;
-pub use media_type_map::MediaTypeMap;
+pub use media_type_error::MediaTypeError;
+pub use media_type_map::{MediaTypeMap, MediaTypeMapIter};
 
 #[cfg(doctest)]
 #[doc = include_str!("../context/getting-started.md")]

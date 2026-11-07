@@ -20,7 +20,7 @@ use std::fmt;
 /// let accepted = [MediaRange::parse("image/*")?, MediaRange::parse("text/*")?];
 /// let (renderer, range) = renderers.select(&accepted).unwrap();
 /// assert_eq!((*renderer, range.subtype()), ("text", "*"));
-/// # Ok::<(), base_web_media_type::Error>(())
+/// # Ok::<(), base_web_media_type::MediaTypeError>(())
 /// ```
 #[derive(Clone)]
 pub struct MediaTypeMap<T> {
@@ -105,10 +105,8 @@ impl<T> MediaTypeMap<T> {
     }
 
     /// Registered media types and values, in registration order.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = (&MediaType, &T)> {
-        self.entries
-            .iter()
-            .map(|(media_type, value)| (media_type, value))
+    pub fn iter(&self) -> MediaTypeMapIter<'_, T> {
+        MediaTypeMapIter(self.entries.iter())
     }
 
     fn entry(&self, range: &MediaRange) -> Option<&(MediaType, T)> {
@@ -151,5 +149,32 @@ impl<T> Extend<(MediaType, T)> for MediaTypeMap<T> {
         for (media_type, value) in entries {
             self.insert(media_type, value);
         }
+    }
+}
+
+/// An iterator over a [`MediaTypeMap`]'s media types and values, in registration order.
+#[derive(Clone, Debug)]
+pub struct MediaTypeMapIter<'a, T>(std::slice::Iter<'a, (MediaType, T)>);
+
+impl<'a, T> Iterator for MediaTypeMapIter<'a, T> {
+    type Item = (&'a MediaType, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|(media_type, value)| (media_type, value))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+}
+
+impl<T> ExactSizeIterator for MediaTypeMapIter<'_, T> {}
+
+impl<'a, T> IntoIterator for &'a MediaTypeMap<T> {
+    type Item = (&'a MediaType, &'a T);
+    type IntoIter = MediaTypeMapIter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
