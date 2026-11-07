@@ -113,6 +113,64 @@ fn can_be_empty_and_extended() {
     assert_eq!(names(&set.clone()), ["application/json", "text/*"]);
     assert_eq!(
         format!("{set:?}"),
-        "MediaRangeSet { ranges: [MediaRange(application/json), MediaRange(text/*)] }"
+        "{MediaRange(application/json), MediaRange(text/*)}"
     );
+}
+
+#[test]
+fn wildcards_absorb_members_and_keep_the_rest_in_order() {
+    let mut set = set(&[
+        "text/plain",
+        "image/png",
+        "text/html",
+        "image/gif",
+        "application/json",
+    ]);
+    set.insert(range("text/*"));
+    assert_eq!(
+        names(&set),
+        ["image/png", "image/gif", "application/json", "text/*"]
+    );
+    assert_eq!((set.len(), set.iter().len()), (4, 4));
+    assert!(set.matches(range("text/*")) && set.contains(&MediaType::TEXT_CSS));
+    set.insert(range("text/csv"));
+    set.insert(range("image/*"));
+    // Absorbed members now outnumber the members, so the set compacts and its index follows.
+    assert_eq!(names(&set), ["application/json", "text/*", "image/*"]);
+    set.insert(range("application/pdf"));
+    set.insert(range("application/json"));
+    assert_eq!(
+        names(&set),
+        ["application/json", "text/*", "image/*", "application/pdf"]
+    );
+    set.insert(range("application/*"));
+    assert_eq!(names(&set), ["text/*", "image/*", "application/*"]);
+    assert_eq!(
+        set.into_iter().collect::<Vec<_>>(),
+        [range("text/*"), range("image/*"), range("application/*")]
+    );
+}
+
+#[test]
+fn iterators_report_their_remaining_length() {
+    let set = set(&["text/plain", "text/html", "image/*"]);
+    let mut iterator = set.iter();
+    assert_eq!(iterator.size_hint(), (3, Some(3)));
+    assert_eq!(iterator.next(), Some(&range("text/plain")));
+    assert_eq!(iterator.len(), 2);
+    assert!(format!("{:?}", iterator.clone()).starts_with("MediaRangeSetIter"));
+    assert_eq!(iterator.by_ref().count(), 2);
+    assert_eq!(iterator.next(), None);
+}
+
+#[test]
+fn large_sets_of_distinct_ranges_build_quickly() {
+    // Each insertion is a constant-time index lookup, so a set built from a large untrusted `Accept` field costs time proportional to its size.
+    let ranges: Vec<MediaRange> = (0..50_000)
+        .map(|index| range(&format!("type{index}/subtype")))
+        .collect();
+    let set: MediaRangeSet = ranges.iter().collect();
+    assert_eq!(set.len(), 50_000);
+    assert!(set.contains(&MediaType::parse("type49999/subtype").unwrap()));
+    assert!(set.matches(range("type7/*")) && !set.matches(range("type50000/*")));
 }
