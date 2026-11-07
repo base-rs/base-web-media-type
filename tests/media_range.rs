@@ -20,7 +20,7 @@ fn parses_ranges_with_parameters() {
     let parsed = range("text/*; profile=\"example\"");
     assert_eq!(
         (parsed.top_level_type(), parsed.subtype(), parsed.essence()),
-        ("text", "*", "text/*".to_owned())
+        ("text", "*", "text/*")
     );
     assert_eq!(
         parsed.parameters().collect::<Vec<_>>(),
@@ -29,7 +29,7 @@ fn parses_ranges_with_parameters() {
     assert_eq!(parsed.to_string(), "text/*; profile=example");
     assert_eq!(
         "text/*".parse::<MediaRange>(),
-        Ok(MediaRange::from_static("text", "*"))
+        Ok(MediaRange::from_static("text/*"))
     );
     assert_eq!(range("*/*"), MediaRange::ANY);
 }
@@ -78,14 +78,23 @@ fn follows_the_rfc_9110_grammar() {
         "text/plain; =b",
         "text plain",
         "text/plain; a=\"unterminated",
-        "text/plain; a=\"line\nbreak\"",
-        "text/plain; a=\"bad\\\u{1}\"",
         "text/plain; a=\"trailing\\",
     ] {
         assert_eq!(
             MediaRange::parse(invalid),
             Err(Error::Syntax),
             "{invalid:?}"
+        );
+    }
+    for control in [
+        "text/plain; a=\"line\nbreak\"",
+        "text/plain; a=\"bad\\\u{1}\"",
+        "text/plain; a=\"del\u{7f}\"",
+    ] {
+        assert_eq!(
+            MediaRange::parse(control),
+            Err(Error::ParameterValue),
+            "{control:?}"
         );
     }
     assert_eq!(MediaRange::parse("*/json"), Err(Error::Wildcard));
@@ -126,7 +135,7 @@ fn builds_ranges_and_parameters() {
     assert_eq!(built.to_string(), "text/*; format=flowed");
     assert_eq!(
         built.without_parameters(),
-        MediaRange::from_static("text", "*")
+        MediaRange::from_static("text/*")
     );
     assert_eq!(MediaRange::new("*", "json"), Err(Error::Wildcard));
     assert_eq!(MediaRange::new("te xt", "plain"), Err(Error::Syntax));
@@ -147,17 +156,21 @@ fn builds_ranges_and_parameters() {
 
 #[test]
 fn static_ranges_are_checked() {
-    for (top_level_type, subtype) in [
-        ("Text", "plain"),
-        ("text", ""),
-        ("te xt", "plain"),
-        ("*", "json"),
+    for name in [
+        "Text/plain",
+        "text/",
+        "/plain",
+        "text",
+        "te xt/plain",
+        "a/b/c",
+        "*/json",
     ] {
         assert!(
-            std::panic::catch_unwind(|| MediaRange::from_static(top_level_type, subtype)).is_err(),
-            "{top_level_type}/{subtype}"
+            std::panic::catch_unwind(|| MediaRange::from_static(name)).is_err(),
+            "{name}"
         );
     }
+    assert_eq!(MediaRange::from_static("text/*").essence(), "text/*");
 }
 
 #[test]
@@ -217,4 +230,31 @@ fn formatting_errors_propagate() {
     }
     assert!(write!(Failing { remaining: length }, "{quoted}").is_ok());
     assert!(write!(Failing { remaining: 3 }, "{}", MediaType::TEXT_PLAIN).is_err());
+}
+
+#[test]
+fn the_number_of_parameters_is_limited() {
+    let parameters = |count: usize| {
+        (0..count)
+            .map(|index| format!("; p{index}=v"))
+            .collect::<String>()
+    };
+    let at_limit = range(&format!("a/b{}", parameters(MediaRange::MAX_PARAMETERS)));
+    assert_eq!(at_limit.parameters().len(), MediaRange::MAX_PARAMETERS);
+    assert_eq!(
+        MediaRange::parse(&format!(
+            "a/b{}",
+            parameters(MediaRange::MAX_PARAMETERS + 1)
+        )),
+        Err(Error::TooManyParameters)
+    );
+    // A long input stops at the limit, so the quadratic duplicate check never grows past it.
+    assert_eq!(
+        MediaRange::parse(&format!("a/b{}", parameters(40_000))),
+        Err(Error::TooManyParameters)
+    );
+    assert_eq!(
+        at_limit.with_parameter("extra", "v"),
+        Err(Error::TooManyParameters)
+    );
 }

@@ -29,9 +29,18 @@ jobs:
       - name: Run tests and require complete source-region coverage
         run: cargo bake --locked test:coverage --all-targets true
 
+  minimum-rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.87
+      - name: Build the libraries with the declared minimum Rust version
+        run: cargo check --package base-web-media-type --package base-web-media-type-registry --all-targets --locked
+
   test-result:
     if: always()
-    needs: [test]
+    needs: [test, minimum-rust]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

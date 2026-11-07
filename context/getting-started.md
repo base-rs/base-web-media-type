@@ -27,7 +27,7 @@ Constants such as `MediaType::TEXT_PLAIN` cover common types. Define others with
 ```rust
 use base_web_media_type::MediaType;
 
-const ATOM: MediaType = MediaType::from_static("application", "atom+xml");
+const ATOM: MediaType = MediaType::from_static("application/atom+xml");
 ```
 
 A `MediaType` converts into a `MediaRange`, and every function that takes a range accepts either through `AsRef<MediaRange>`.
@@ -47,17 +47,17 @@ assert!(MediaRange::ANY.matches(&versioned));
 
 ## Sets
 
-A `MediaRangeSet` answers whether a type is acceptable, such as for uploads:
+A `MediaRangeSet` holds the types something accepts, such as an upload field. Check a concrete type with `contains`:
 
 ```rust
 use base_web_media_type::{MediaRange, MediaRangeSet, MediaType};
 
-let allowed = MediaRangeSet::new([MediaRange::new("image", "*").unwrap(), MediaType::APPLICATION_PDF.into()]);
-assert!(allowed.contains(MediaType::IMAGE_PNG));
-assert!(!allowed.contains(MediaType::TEXT_HTML));
+let allowed: MediaRangeSet = [MediaRange::new("image", "*").unwrap(), MediaType::APPLICATION_PDF.into()].into_iter().collect();
+assert!(allowed.contains(&MediaType::IMAGE_PNG));
+assert!(!allowed.contains(&MediaType::TEXT_HTML));
 ```
 
-Ranges covered by a wildcard are absorbed, and adding `*/*` makes the set universal.
+Parse an upload's `Content-Type` as a `MediaType`, never a `MediaRange`, so a client cannot send a wildcard such as `*/*`. `matches` instead asks whether any member is compatible with a range, so `*/*` matches any non-empty set. Ranges covered by a wildcard are absorbed, and adding `*/*` makes the set universal.
 
 ## Maps
 
