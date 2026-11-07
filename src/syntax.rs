@@ -93,6 +93,7 @@ pub(crate) fn parse(text: &str) -> Result<Parsed, MediaTypeError> {
 }
 
 /// Write a parameter value as a token, or as a quoted string when it is not one.
+// SECURITY: Serialized values cannot add parameters or break a header line: values with control characters other than tab, including CR and LF, are refused when parsed or added, and every other value is written as a token or as a quoted string with `"` and `\` escaped.
 pub(crate) fn write_value(formatter: &mut fmt::Formatter<'_>, value: &str) -> fmt::Result {
     if is_token(value) {
         return formatter.write_str(value);
