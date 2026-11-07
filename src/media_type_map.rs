@@ -29,7 +29,7 @@ pub struct MediaTypeMap<T> {
     types: HashMap<String, TypeIndex>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct TypeIndex {
     first: usize,
     subtypes: HashMap<String, usize>,
