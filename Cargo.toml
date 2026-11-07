@@ -1,0 +1,21 @@
+[package]
+name = "base-web-media-type"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+license = "MIT"
+description = "Media types, media ranges, and range-based sets and maps"
+repository = "https://github.com/base-rs/base-web-media-type"
+readme = "readme.md"
+keywords = ["media-type", "mime", "content-type", "accept", "web"]
+categories = ["web-programming", "parser-implementations"]
+include = ["src/**", "context/**", "Cargo.toml", "readme.md", "license.md", "releases.md"]
+
+[workspace]
+members = ["registry", "bake"]
+resolver = "3"
+
+[workspace.metadata.bake.release]
+reviewers = ["base-rs/maintainers"]
+
+[dependencies]

@@ -1,0 +1,15 @@
+[package]
+name = "base-web-media-type-registry"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+license = "MIT"
+description = "Registered media types with their encodings and filename extensions"
+repository = "https://github.com/base-rs/base-web-media-type"
+readme = "readme.md"
+keywords = ["media-type", "mime", "registry", "file-extension", "web"]
+categories = ["web-programming"]
+include = ["src/**", "Cargo.toml", "readme.md", "license.md", "data-license.md"]
+
+[dependencies]
+base-web-media-type = { version = "=0.1.0", path = ".." }
