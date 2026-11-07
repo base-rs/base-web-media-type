@@ -2,8 +2,8 @@
 // Copyright, 2026, by Samuel Williams.
 
 use crate::{MediaRange, MediaType};
-use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt;
 
 /// A map from concrete media types to values, looked up by media range, such as the representations an application can produce for content negotiation.
 ///
@@ -17,22 +17,22 @@ use std::collections::HashMap;
 /// renderers.insert(MediaType::TEXT_PLAIN, "text");
 ///
 /// // The client's ranges, in preference order, as parsed from an `Accept` field.
-/// let accepted = [MediaRange::parse("image/*")?, MediaRange::parse("text/*;q=0.5")?];
+/// let accepted = [MediaRange::parse("image/*")?, MediaRange::parse("text/*")?];
 /// let (renderer, range) = renderers.select(&accepted).unwrap();
 /// assert_eq!((*renderer, range.subtype()), ("text", "*"));
 /// # Ok::<(), base_web_media_type::Error>(())
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MediaTypeMap<T> {
     entries: Vec<(MediaType, T)>,
     /// Entry indexes by top-level type: the first entry of the type, and each subtype's entry.
-    types: HashMap<Cow<'static, str>, TypeIndex>,
+    types: HashMap<String, TypeIndex>,
 }
 
 #[derive(Clone, Debug)]
 struct TypeIndex {
     first: usize,
-    subtypes: HashMap<Cow<'static, str>, usize>,
+    subtypes: HashMap<String, usize>,
 }
 
 impl<T> MediaTypeMap<T> {
@@ -50,7 +50,7 @@ impl<T> MediaTypeMap<T> {
         let index = self.entries.len();
         let type_index = self
             .types
-            .entry(range.top_level_type_name().clone())
+            .entry(range.top_level_type().to_owned())
             .or_insert_with(|| TypeIndex {
                 first: index,
                 subtypes: HashMap::new(),
@@ -64,7 +64,7 @@ impl<T> MediaTypeMap<T> {
             None => {
                 type_index
                     .subtypes
-                    .insert(range.subtype_name().clone(), index);
+                    .insert(range.subtype().to_owned(), index);
                 self.entries.push((media_type, value));
                 None
             }
@@ -122,6 +122,13 @@ impl<T> MediaTypeMap<T> {
             *type_index.subtypes.get(range.subtype())?
         };
         Some(&self.entries[index])
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for MediaTypeMap<T> {
+    /// Shows the entries in registration order, without the lookup index.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_map().entries(self.iter()).finish()
     }
 }
 

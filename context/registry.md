@@ -27,8 +27,8 @@ The table in `registry/src/records.rs` is generated from a pinned release of the
 
 The generator, the `registry:generate` task in the private `bake/` package:
 
-- trims and lowercases names, and skips names that are not valid concrete media types, reporting them;
-- lowercases and deduplicates extensions, and adds `map` to `application/json`, as the Ruby `protocol-media-registry` does;
+- trims and lowercases names, skips names that are not valid concrete media types, reporting them, and sorts records by type and then subtype, the order lookups search;
+- removes leading dots from extensions, lowercases and deduplicates them, and adds `map` to `application/json`, as the Ruby `protocol-media-registry` does;
 - chooses each extension's record by `mime-types-data`'s sort priority, as the Ruby generator does.
 
 ## Updating the data

@@ -1,21 +1,22 @@
 // Released under the MIT License.
 // Copyright, 2026, by Samuel Williams.
 
-use crate::MediaRange;
-use std::borrow::Cow;
+use crate::{MediaRange, MediaType};
 
-/// A set of media ranges, for asking whether a media type or range is acceptable, such as for allowed upload types.
+/// A set of media ranges, such as the types an upload field accepts.
 ///
 /// Membership depends only on types and subtypes; parameters are ignored. Ranges covered by a wildcard are absorbed: adding `image/*` makes `image/png` redundant, and `*/*` makes the set universal.
+///
+/// Use [`Self::contains`] to check a concrete media type, such as a request's `Content-Type`, against the set: parse it as a [`MediaType`], so a client cannot send a wildcard. Use [`Self::matches`] to ask whether any member is compatible with a range, such as in content negotiation.
 ///
 /// ```
 /// use base_web_media_type::{MediaRange, MediaRangeSet, MediaType};
 ///
-/// let images: MediaRangeSet = [MediaRange::from_static("image", "*")].into_iter().collect();
-/// assert!(images.contains(MediaType::IMAGE_PNG));
-/// assert!(!images.contains(MediaType::TEXT_PLAIN));
+/// let allowed: MediaRangeSet = [MediaRange::from_static("image/*")].into_iter().collect();
+/// assert!(allowed.contains(&MediaType::IMAGE_PNG));
+/// assert!(!allowed.contains(&MediaType::TEXT_PLAIN));
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct MediaRangeSet {
     membership: Membership,
 }
@@ -36,19 +37,15 @@ impl Default for Membership {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct TypeMembers {
-    top_level_type: Cow<'static, str>,
+    top_level_type: String,
     /// `None` when every subtype is a member; otherwise member subtypes in the order they were first added.
-    subtypes: Option<Vec<Cow<'static, str>>>,
+    subtypes: Option<Vec<String>>,
 }
 
 impl MediaRangeSet {
-    /// A set containing `ranges`.
-    pub fn new<R: AsRef<MediaRange>>(ranges: impl IntoIterator<Item = R>) -> Self {
-        let mut set = Self::default();
-        for range in ranges {
-            set.insert(range);
-        }
-        set
+    /// An empty set. Build one from ranges with `collect` or `extend`.
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Add a range. Its parameters are ignored.
@@ -61,7 +58,7 @@ impl MediaRangeSet {
             self.membership = Membership::Universal;
             return;
         }
-        let subtype = (!range.is_wildcard_subtype()).then(|| range.subtype_name().clone());
+        let subtype = (!range.is_wildcard_subtype()).then(|| range.subtype().to_owned());
         match types
             .iter_mut()
             .find(|members| members.top_level_type == range.top_level_type())
@@ -74,14 +71,19 @@ impl MediaRangeSet {
                 _ => {}
             },
             None => types.push(TypeMembers {
-                top_level_type: range.top_level_type_name().clone(),
+                top_level_type: range.top_level_type().to_owned(),
                 subtypes: subtype.map(|subtype| vec![subtype]),
             }),
         }
     }
 
-    /// Whether a member is compatible with `range`. A query for `*/*` matches any non-empty set, and `type/*` matches when any member has that type.
-    pub fn contains(&self, range: impl AsRef<MediaRange>) -> bool {
+    /// Whether `media_type` is a member: a member range matches its type and subtype.
+    pub fn contains(&self, media_type: &MediaType) -> bool {
+        self.matches(media_type)
+    }
+
+    /// Whether any member is compatible with `range`. For a concrete type this is membership, as with [`Self::contains`]; a `type/*` query matches when any member has that type, and `*/*` matches any non-empty set.
+    pub fn matches(&self, range: impl AsRef<MediaRange>) -> bool {
         let range = range.as_ref();
         let types = match &self.membership {
             Membership::Universal => return true,
@@ -125,29 +127,38 @@ impl MediaRangeSet {
     }
 
     /// The canonical member ranges, without parameters or redundant entries: `*/*` alone for a universal set, otherwise `type/*` or each `type/subtype`, by type in the order each was first added.
-    pub fn iter(&self) -> impl Iterator<Item = MediaRange> + '_ {
-        let (universal, types) = match &self.membership {
-            Membership::Universal => (true, &[][..]),
-            Membership::Types(types) => (false, types.as_slice()),
+    pub fn iter(&self) -> std::vec::IntoIter<MediaRange> {
+        let ranges: Vec<MediaRange> = match &self.membership {
+            Membership::Universal => vec![MediaRange::ANY],
+            Membership::Types(types) => types
+                .iter()
+                .flat_map(|members| match &members.subtypes {
+                    None => vec![MediaRange::from_parts(&members.top_level_type, "*")],
+                    Some(subtypes) => subtypes
+                        .iter()
+                        .map(|subtype| MediaRange::from_parts(&members.top_level_type, subtype))
+                        .collect(),
+                })
+                .collect(),
         };
-        universal
-            .then_some(MediaRange::ANY)
-            .into_iter()
-            .chain(types.iter().flat_map(|members| {
-                let subtypes = match &members.subtypes {
-                    None => vec![Cow::Borrowed("*")],
-                    Some(subtypes) => subtypes.clone(),
-                };
-                subtypes
-                    .into_iter()
-                    .map(|subtype| MediaRange::from_names(members.top_level_type.clone(), subtype))
-            }))
+        ranges.into_iter()
+    }
+}
+
+impl IntoIterator for &MediaRangeSet {
+    type Item = MediaRange;
+    type IntoIter = std::vec::IntoIter<MediaRange>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
 impl<R: AsRef<MediaRange>> FromIterator<R> for MediaRangeSet {
     fn from_iter<I: IntoIterator<Item = R>>(ranges: I) -> Self {
-        Self::new(ranges)
+        let mut set = Self::new();
+        set.extend(ranges);
+        set
     }
 }
 

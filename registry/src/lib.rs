@@ -33,13 +33,12 @@ pub struct Record {
 
 impl Record {
     const fn new(
-        top_level_type: &'static str,
-        subtype: &'static str,
+        essence: &'static str,
         encoding: ContentTransferEncoding,
         extensions: &'static [&'static str],
     ) -> Self {
         Self {
-            media_type: MediaType::from_static(top_level_type, subtype),
+            media_type: MediaType::from_static(essence),
             encoding,
             extensions,
         }
@@ -55,7 +54,7 @@ impl Record {
         self.encoding
     }
 
-    /// Known filename extensions, in lowercase and without a leading dot, most common first. Many types have none.
+    /// Known filename extensions, in lowercase and without a leading dot, in the source data's order. Many types have none.
     pub fn extensions(&self) -> &'static [&'static str] {
         self.extensions
     }
@@ -63,11 +62,14 @@ impl Record {
 
 /// A MIME content transfer encoding (RFC 2045).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ContentTransferEncoding {
     /// `7bit`: short lines of ASCII text.
     SevenBit,
     /// `8bit`: short lines of text that may use non-ASCII bytes.
     EightBit,
+    /// `binary`: arbitrary bytes without line limits.
+    Binary,
     /// `base64`, for binary data.
     Base64,
     /// `quoted-printable`, for mostly ASCII text.
@@ -80,6 +82,7 @@ impl ContentTransferEncoding {
         match self {
             Self::SevenBit => "7bit",
             Self::EightBit => "8bit",
+            Self::Binary => "binary",
             Self::Base64 => "base64",
             Self::QuotedPrintable => "quoted-printable",
         }
@@ -146,8 +149,7 @@ mod tests {
     fn records_can_be_built_at_runtime() {
         // Generated records are built at compile time, so build one at runtime for coverage of the constructor.
         let record = Record::new(
-            "text",
-            "plain",
+            "text/plain",
             ContentTransferEncoding::QuotedPrintable,
             &["txt"],
         );
@@ -161,10 +163,6 @@ mod tests {
         );
     }
 }
-
-#[cfg(doctest)]
-#[doc = include_str!("../../context/registry.md")]
-struct RegistryGuide;
 
 #[cfg(doctest)]
 #[doc = include_str!("../readme.md")]

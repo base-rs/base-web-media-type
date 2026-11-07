@@ -8,8 +8,10 @@ use std::fmt::{self, Write as _};
 
 /// A parsed media type or range, before wildcard rules are applied. Names are lowercase.
 pub(crate) struct Parsed {
-    pub top_level_type: String,
-    pub subtype: String,
+    /// `type/subtype`.
+    pub essence: String,
+    /// The position of the `/` in `essence`.
+    pub slash: usize,
     pub parameters: Vec<(String, String)>,
 }
 
@@ -46,9 +48,10 @@ pub(crate) fn is_quotable(character: char) -> bool {
 /// Parse `type "/" subtype *( OWS ";" OWS [ parameter ] )`. Surrounding whitespace is not accepted; callers trim field values first.
 pub(crate) fn parse(text: &str) -> Result<Parsed, Error> {
     let mut scanner = Scanner { text, position: 0 };
-    let top_level_type = scanner.token()?.to_ascii_lowercase();
+    let top_level_type = scanner.token()?;
     scanner.expect(b'/')?;
-    let subtype = scanner.token()?.to_ascii_lowercase();
+    let subtype = scanner.token()?;
+    let essence = format!("{top_level_type}/{subtype}").to_ascii_lowercase();
     let mut parameters: Vec<(String, String)> = Vec::new();
     loop {
         let before = scanner.position;
@@ -76,11 +79,15 @@ pub(crate) fn parse(text: &str) -> Result<Parsed, Error> {
         if parameters.iter().any(|(existing, _)| *existing == name) {
             return Err(Error::DuplicateParameter);
         }
+        // Checking each new name against the earlier ones is quadratic, so bound the count before it grows.
+        if parameters.len() == crate::MediaRange::MAX_PARAMETERS {
+            return Err(Error::TooManyParameters);
+        }
         parameters.push((name, value));
     }
     Ok(Parsed {
-        top_level_type,
-        subtype,
+        essence,
+        slash: top_level_type.len(),
         parameters,
     })
 }
@@ -152,10 +159,11 @@ impl<'a> Scanner<'a> {
                 }
                 '\\' => match characters.next() {
                     Some((_, escaped)) if is_quotable(escaped) => value.push(escaped),
-                    _ => return Err(Error::Syntax),
+                    Some(_) => return Err(Error::ParameterValue),
+                    None => return Err(Error::Syntax),
                 },
                 character if is_quotable(character) => value.push(character),
-                _ => return Err(Error::Syntax),
+                _ => return Err(Error::ParameterValue),
             }
         }
         Err(Error::Syntax)

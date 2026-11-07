@@ -5,9 +5,9 @@ use super::*;
 
 const SOURCE: &str = r#"[
     {"content-type": "text/plain", "encoding": "quoted-printable", "extensions": ["txt", "TXT", "text"], "sort-priority": 2},
-    {"content-type": "application/json", "encoding": "8bit", "extensions": ["json"]},
-    {"content-type": "Application/Vnd.Example ", "encoding": "base64", "extensions": ["txt"], "sort-priority": 1},
-    {"content-type": "application/x-compress", "encoding": "7bit", "extensions": ["z"], "sort-priority": 174, "preferred-extension": "z"},
+    {"content-type": "application/json", "encoding": "8bit", "extensions": ["json", "map", ".htaccess", "."]},
+    {"content-type": "Application/Vnd.Example ", "encoding": "7bit", "extensions": ["txt"], "sort-priority": 1},
+    {"content-type": "application/x-compress", "encoding": "binary", "extensions": ["z"], "sort-priority": 174, "preferred-extension": "z"},
     {"content-type": "application/x-compressed", "encoding": "base64", "extensions": ["z"], "sort-priority": 46},
     {"content-type": "application/application/broken", "encoding": "base64"}
 ]"#;
@@ -29,8 +29,8 @@ fn records_are_normalized_and_sorted() {
     assert_eq!(skipped, ["\"application/application/broken\""]);
     assert_eq!(
         records[0].extensions,
-        ["json", "map"],
-        "additional extensions are added"
+        ["json", "map", "htaccess"],
+        "leading dots are removed, empty extensions skipped, and an existing additional extension is not repeated"
     );
     assert_eq!(
         records[4].extensions,
@@ -50,7 +50,14 @@ fn each_extension_prefers_the_lowest_priority() {
     // `txt` is listed by priority 1 and 2; `z` by 46 and by a preferred-extension record at 174, promoted to 167.
     assert_eq!(
         extensions.into_iter().collect::<Vec<_>>(),
-        [("json", 0), ("map", 0), ("text", 4), ("txt", 1), ("z", 3)]
+        [
+            ("htaccess", 0),
+            ("json", 0),
+            ("map", 0),
+            ("text", 4),
+            ("txt", 1),
+            ("z", 3)
+        ]
     );
 }
 
@@ -60,13 +67,11 @@ fn renders_rust_tables() {
     let output = render(&records, "3.2026.1103").unwrap();
     assert!(output.contains("from mime-types-data 3.2026.1103; do not edit."));
     assert!(output.contains("pub(crate) const SOURCE_VERSION: &str = \"3.2026.1103\";"));
-    assert!(output.contains("pub(crate) static RECORDS: [Record; 5] = [\n    Record::new(\"application\", \"json\", EightBit, &[\"json\", \"map\"]),"));
-    assert!(output.contains(
-        "    Record::new(\"text\", \"plain\", QuotedPrintable, &[\"txt\", \"text\"]),\n];"
-    ));
-    assert!(
-        output.contains("pub(crate) static EXTENSIONS: [(&str, u16); 5] = [\n    (\"json\", 0),")
-    );
+    assert!(output.contains("pub(crate) static RECORDS: [Record; 5] = [\n    Record::new(\"application/json\", EightBit, &[\"json\", \"map\", \"htaccess\"]),"));
+    assert!(output
+        .contains("    Record::new(\"text/plain\", QuotedPrintable, &[\"txt\", \"text\"]),\n];"));
+    assert!(output
+        .contains("pub(crate) static EXTENSIONS: [(&str, u16); 6] = [\n    (\"htaccess\", 0),"));
     let many: Vec<_> = (0..=u32::from(u16::MAX))
         .map(|index| Record {
             top_level_type: "a".to_owned(),
@@ -123,10 +128,10 @@ fn the_task_writes_the_generated_table() {
     let summary = context
         .call("registry:generate", &["source.json", "3.1"])
         .unwrap();
-    assert_eq!(summary, "Generated 5 records and 5 extensions from mime-types-data 3.1; skipped invalid media types: \"application/application/broken\"");
+    assert_eq!(summary, "Generated 5 records and 6 extensions from mime-types-data 3.1; skipped invalid media types: \"application/application/broken\"");
     assert!(std::fs::read_to_string(directory.join(OUTPUT))
         .unwrap()
-        .contains("Record::new(\"text\", \"plain\""));
+        .contains("Record::new(\"text/plain\""));
     std::fs::write(
         directory.join("clean.json"),
         r#"[{"content-type": "application/json", "encoding": "8bit"}]"#,
@@ -158,4 +163,14 @@ fn the_task_writes_the_generated_table() {
         "the output directory must exist"
     );
     std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn records_are_ordered_by_type_then_subtype() {
+    // `x-foo/a` sorts before `x/a` as a string, but after it as a type and subtype pair, which is how lookups search.
+    let source = r#"[{"content-type": "x-foo/a", "encoding": "8bit"}, {"content-type": "x/a", "encoding": "8bit"}, {"content-type": "application/json", "encoding": "8bit"}]"#;
+    let (records, _) = records(source).unwrap();
+    let names: Vec<_> = records.iter().map(Record::name).collect();
+    assert_eq!(names, ["application/json", "x/a", "x-foo/a"]);
+    assert_eq!(records[2].encoding, "EightBit");
 }

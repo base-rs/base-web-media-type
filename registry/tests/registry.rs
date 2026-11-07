@@ -135,13 +135,17 @@ fn encodings_have_their_mime_names() {
     let names: Vec<_> = [
         ContentTransferEncoding::SevenBit,
         ContentTransferEncoding::EightBit,
+        ContentTransferEncoding::Binary,
         ContentTransferEncoding::Base64,
         ContentTransferEncoding::QuotedPrintable,
     ]
     .into_iter()
     .map(ContentTransferEncoding::as_str)
     .collect();
-    assert_eq!(names, ["7bit", "8bit", "base64", "quoted-printable"]);
+    assert_eq!(
+        names,
+        ["7bit", "8bit", "binary", "base64", "quoted-printable"]
+    );
     assert_eq!(
         registry::get("text/plain").unwrap().encoding(),
         ContentTransferEncoding::QuotedPrintable
@@ -155,4 +159,22 @@ fn non_utf8_extensions_have_no_record() {
     use std::os::unix::ffi::OsStrExt;
     let path = std::path::Path::new(std::ffi::OsStr::from_bytes(b"file.\xff"));
     assert!(registry::for_path(path).is_none());
+}
+
+#[test]
+fn source_extensions_with_a_leading_dot_are_normalized() {
+    // The source data lists `.htaccess` with its dot; the generator stores it without one.
+    for query in ["htaccess", ".htaccess"] {
+        assert_eq!(
+            registry::for_extension(query).unwrap().media_type(),
+            &MediaType::TEXT_PLAIN,
+            "{query}"
+        );
+    }
+    assert!(registry::records().iter().all(|record| {
+        record
+            .extensions()
+            .iter()
+            .all(|extension| !extension.starts_with('.') && !extension.is_empty())
+    }));
 }

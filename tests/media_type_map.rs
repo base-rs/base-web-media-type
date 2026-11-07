@@ -47,7 +47,7 @@ fn looks_up_exact_types_and_wildcards_by_registration_order() {
     assert_eq!((map.len(), map.is_empty()), (3, false));
     assert_eq!(
         map.iter()
-            .map(|(media_type, value)| (media_type.essence(), *value))
+            .map(|(media_type, value)| (media_type.essence().to_owned(), *value))
             .collect::<Vec<_>>(),
         [
             ("application/json".to_owned(), "json"),
@@ -84,10 +84,7 @@ fn selects_the_first_acceptable_range() {
     let (value, selected) = map
         .select(vec![range("image/*"), MediaType::APPLICATION_JSON.into()])
         .unwrap();
-    assert_eq!(
-        (*value, selected.essence()),
-        ("json", "application/json".to_owned())
-    );
+    assert_eq!((*value, selected.essence()), ("json", "application/json"));
     assert!(map.select([range("image/*")]).is_none());
     assert!(
         MediaTypeMap::<()>::default()

@@ -17,6 +17,8 @@ pub enum Error {
     DuplicateParameter,
     /// A parameter value contains a control character other than horizontal tab, so it cannot be written as a quoted string.
     ParameterValue,
+    /// A media range has more than [`MediaRange::MAX_PARAMETERS`](crate::MediaRange::MAX_PARAMETERS) parameters.
+    TooManyParameters,
 }
 
 impl fmt::Display for Error {
@@ -26,6 +28,7 @@ impl fmt::Display for Error {
             Self::Wildcard => "invalid wildcard in media type",
             Self::DuplicateParameter => "duplicate media type parameter",
             Self::ParameterValue => "media type parameter value contains a control character",
+            Self::TooManyParameters => "too many media type parameters",
         })
     }
 }

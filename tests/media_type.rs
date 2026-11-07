@@ -12,7 +12,7 @@ fn parses_concrete_media_types() {
             media_type.subtype(),
             media_type.essence()
         ),
-        ("text", "plain", "text/plain".to_owned())
+        ("text", "plain", "text/plain")
     );
     assert_eq!(
         media_type.parameters().collect::<Vec<_>>(),
@@ -46,10 +46,10 @@ fn wildcards_and_invalid_names_are_rejected() {
         MediaType::TEXT_PLAIN.with_parameter("charset", "a\u{7f}"),
         Err(Error::ParameterValue)
     );
-    for (top_level_type, subtype) in [("*", "*"), ("text", "*"), ("Text", "plain")] {
+    for name in ["*/*", "text/*", "Text/plain", "text"] {
         assert!(
-            std::panic::catch_unwind(|| MediaType::from_static(top_level_type, subtype)).is_err(),
-            "{top_level_type}/{subtype}"
+            std::panic::catch_unwind(|| MediaType::from_static(name)).is_err(),
+            "{name}"
         );
     }
 }
@@ -111,6 +111,7 @@ fn errors_describe_the_problem() {
         Error::Wildcard,
         Error::DuplicateParameter,
         Error::ParameterValue,
+        Error::TooManyParameters,
     ]
     .iter()
     .map(ToString::to_string)
@@ -121,7 +122,8 @@ fn errors_describe_the_problem() {
             "invalid media type syntax",
             "invalid wildcard in media type",
             "duplicate media type parameter",
-            "media type parameter value contains a control character"
+            "media type parameter value contains a control character",
+            "too many media type parameters"
         ]
     );
     let error: Box<dyn std::error::Error> = Box::new(Error::Syntax);
