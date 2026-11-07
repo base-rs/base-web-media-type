@@ -90,6 +90,7 @@ impl MediaRangeSet {
     }
 
     /// Whether `media_type` is a member: a member range matches its type and subtype.
+    // SECURITY: A client cannot satisfy an allowlist check by sending a wildcard such as `*/*`: this method accepts only a concrete `MediaType`, which parsing refuses to build from a wildcard. `matches` answers a different question, compatibility with a range, and is not an allowlist check.
     pub fn contains(&self, media_type: &MediaType) -> bool {
         self.matches(media_type)
     }
