@@ -5,7 +5,7 @@ use crate::{MediaRange, MediaType};
 
 /// A set of media ranges, such as the types an upload field accepts.
 ///
-/// Membership depends only on types and subtypes; parameters are ignored. Ranges covered by a wildcard are absorbed: adding `image/*` makes `image/png` redundant, and `*/*` makes the set universal.
+/// Membership depends only on types and subtypes: members are stored without parameters. Ranges covered by a wildcard are absorbed: adding `image/*` replaces `image/png`, and adding `*/*` replaces every member, making the set universal.
 ///
 /// Use [`Self::contains`] to check a concrete media type, such as a request's `Content-Type`, against the set: parse it as a [`MediaType`], so a client cannot send a wildcard. Use [`Self::matches`] to ask whether any member is compatible with a range, such as in content negotiation.
 ///
@@ -18,28 +18,8 @@ use crate::{MediaRange, MediaType};
 /// ```
 #[derive(Clone, Debug, Default)]
 pub struct MediaRangeSet {
-    membership: Membership,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Membership {
-    /// Every media range is a member.
-    Universal,
-    /// Member types in the order they were first added.
-    Types(Vec<TypeMembers>),
-}
-
-impl Default for Membership {
-    fn default() -> Self {
-        Self::Types(Vec::new())
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct TypeMembers {
-    top_level_type: String,
-    /// `None` when every subtype is a member; otherwise member subtypes in the order they were first added.
-    subtypes: Option<Vec<String>>,
+    /// Members without parameters, in the order they were added, none covered by another.
+    ranges: Vec<MediaRange>,
 }
 
 impl MediaRangeSet {
@@ -48,33 +28,14 @@ impl MediaRangeSet {
         Self::default()
     }
 
-    /// Add a range. Its parameters are ignored.
+    /// Add a range, without its parameters, unless a member already covers it. Members it covers are removed.
     pub fn insert(&mut self, range: impl AsRef<MediaRange>) {
         let range = range.as_ref();
-        let Membership::Types(types) = &mut self.membership else {
-            return;
-        };
-        if range.is_wildcard_type() {
-            self.membership = Membership::Universal;
+        if self.ranges.iter().any(|member| covers(member, range)) {
             return;
         }
-        let subtype = (!range.is_wildcard_subtype()).then(|| range.subtype().to_owned());
-        match types
-            .iter_mut()
-            .find(|members| members.top_level_type == range.top_level_type())
-        {
-            Some(members) => match (&mut members.subtypes, subtype) {
-                (Some(_), None) => members.subtypes = None,
-                (Some(subtypes), Some(subtype)) if !subtypes.contains(&subtype) => {
-                    subtypes.push(subtype)
-                }
-                _ => {}
-            },
-            None => types.push(TypeMembers {
-                top_level_type: range.top_level_type().to_owned(),
-                subtypes: subtype.map(|subtype| vec![subtype]),
-            }),
-        }
+        self.ranges.retain(|member| !covers(range, member));
+        self.ranges.push(range.without_parameters());
     }
 
     /// Whether `media_type` is a member: a member range matches its type and subtype.
@@ -85,72 +46,54 @@ impl MediaRangeSet {
     /// Whether any member is compatible with `range`. For a concrete type this is membership, as with [`Self::contains`]; a `type/*` query matches when any member has that type, and `*/*` matches any non-empty set.
     pub fn matches(&self, range: impl AsRef<MediaRange>) -> bool {
         let range = range.as_ref();
-        let types = match &self.membership {
-            Membership::Universal => return true,
-            Membership::Types(types) => types,
-        };
-        if range.is_wildcard_type() {
-            return !types.is_empty();
-        }
-        let Some(members) = types
-            .iter()
-            .find(|members| members.top_level_type == range.top_level_type())
-        else {
-            return false;
-        };
-        match &members.subtypes {
-            None => true,
-            Some(_) if range.is_wildcard_subtype() => true,
-            Some(subtypes) => subtypes.iter().any(|subtype| subtype == range.subtype()),
-        }
+        self.ranges.iter().any(|member| member.matches(range))
     }
 
     /// Whether every media range is a member, because `*/*` was added.
     pub fn is_universal(&self) -> bool {
-        self.membership == Membership::Universal
+        self.ranges
+            .first()
+            .is_some_and(|member| member.is_wildcard_type())
     }
 
     /// Whether the set has no members.
     pub fn is_empty(&self) -> bool {
-        self.membership == Membership::Types(Vec::new())
+        self.ranges.is_empty()
     }
 
-    /// The number of canonical member ranges, as returned by [`Self::iter`].
+    /// The number of members.
     pub fn len(&self) -> usize {
-        match &self.membership {
-            Membership::Universal => 1,
-            Membership::Types(types) => types
-                .iter()
-                .map(|members| members.subtypes.as_ref().map_or(1, Vec::len))
-                .sum(),
-        }
+        self.ranges.len()
     }
 
-    /// The canonical member ranges, without parameters or redundant entries: `*/*` alone for a universal set, otherwise `type/*` or each `type/subtype`, by type in the order each was first added.
-    pub fn iter(&self) -> std::vec::IntoIter<MediaRange> {
-        let ranges: Vec<MediaRange> = match &self.membership {
-            Membership::Universal => vec![MediaRange::ANY],
-            Membership::Types(types) => types
-                .iter()
-                .flat_map(|members| match &members.subtypes {
-                    None => vec![MediaRange::from_parts(&members.top_level_type, "*")],
-                    Some(subtypes) => subtypes
-                        .iter()
-                        .map(|subtype| MediaRange::from_parts(&members.top_level_type, subtype))
-                        .collect(),
-                })
-                .collect(),
-        };
-        ranges.into_iter()
+    /// The members, without parameters, in the order they were added: `*/*` alone for a universal set.
+    pub fn iter(&self) -> std::slice::Iter<'_, MediaRange> {
+        self.ranges.iter()
     }
 }
 
-impl IntoIterator for &MediaRangeSet {
+/// Whether `member` already includes every type `range` names.
+fn covers(member: &MediaRange, range: &MediaRange) -> bool {
+    member.is_wildcard_type()
+        || (member.top_level_type() == range.top_level_type()
+            && (member.is_wildcard_subtype() || member.subtype() == range.subtype()))
+}
+
+impl<'a> IntoIterator for &'a MediaRangeSet {
+    type Item = &'a MediaRange;
+    type IntoIter = std::slice::Iter<'a, MediaRange>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl IntoIterator for MediaRangeSet {
     type Item = MediaRange;
     type IntoIter = std::vec::IntoIter<MediaRange>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.iter()
+        self.ranges.into_iter()
     }
 }
 

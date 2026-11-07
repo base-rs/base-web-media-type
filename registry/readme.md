@@ -6,8 +6,8 @@ Registered media types for Rust, with their conventional transfer encodings and 
 use base_web_media_type::MediaType;
 use base_web_media_type_registry as registry;
 
-assert_eq!(registry::for_path("index.html").unwrap().media_type(), &MediaType::TEXT_HTML);
-assert!(registry::get("application/json").unwrap().extensions().contains(&"json"));
+assert_eq!(registry::by_path("index.html").unwrap().media_type(), &MediaType::TEXT_HTML);
+assert!(registry::by_name("application/json").unwrap().extensions().contains(&"json"));
 ```
 
 Lookups by name, parsed type, extension, and path are case-insensitive and do not allocate. The data is generated from a pinned release of [mime-types-data](https://github.com/mime-types/mime-types-data), available as `SOURCE_VERSION`. See the [Registry guide](https://github.com/base-rs/base-web-media-type/blob/main/context/registry.md) for details and the data update procedure.

@@ -67,9 +67,10 @@ fn renders_rust_tables() {
     let output = render(&records, "3.2026.1103").unwrap();
     assert!(output.contains("from mime-types-data 3.2026.1103; do not edit."));
     assert!(output.contains("pub(crate) const SOURCE_VERSION: &str = \"3.2026.1103\";"));
-    assert!(output.contains("pub(crate) static RECORDS: [Record; 5] = [\n    Record::new(\"application/json\", EightBit, &[\"json\", \"map\", \"htaccess\"]),"));
-    assert!(output
-        .contains("    Record::new(\"text/plain\", QuotedPrintable, &[\"txt\", \"text\"]),\n];"));
+    assert!(output.contains("pub(crate) static RECORDS: [MediaTypeRecord; 5] = [\n    MediaTypeRecord::new(\"application/json\", EightBit, &[\"json\", \"map\", \"htaccess\"]),"));
+    assert!(output.contains(
+        "    MediaTypeRecord::new(\"text/plain\", QuotedPrintable, &[\"txt\", \"text\"]),\n];"
+    ));
     assert!(output
         .contains("pub(crate) static EXTENSIONS: [(&str, u16); 6] = [\n    (\"htaccess\", 0),"));
     let many: Vec<_> = (0..=u32::from(u16::MAX))
@@ -131,7 +132,7 @@ fn the_task_writes_the_generated_table() {
     assert_eq!(summary, "Generated 5 records and 6 extensions from mime-types-data 3.1; skipped invalid media types: \"application/application/broken\"");
     assert!(std::fs::read_to_string(directory.join(OUTPUT))
         .unwrap()
-        .contains("Record::new(\"text/plain\""));
+        .contains("MediaTypeRecord::new(\"text/plain\""));
     std::fs::write(
         directory.join("clean.json"),
         r#"[{"content-type": "application/json", "encoding": "8bit"}]"#,

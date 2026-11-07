@@ -63,7 +63,21 @@ fn enumerates_canonical_members_without_redundant_entries() {
     let set = set(&["application/pdf", "image/*; profile=example"]);
     assert_eq!(names(&set), ["application/pdf", "image/*"]);
     assert_eq!((set.len(), set.iter().len()), (2, 2));
-    assert_eq!((&set).into_iter().count(), 2);
+    assert_eq!(
+        (&set).into_iter().collect::<Vec<_>>(),
+        [
+            &MediaType::APPLICATION_PDF.into(),
+            &MediaRange::from_static("image/*")
+        ]
+    );
+    assert_eq!(
+        set.clone().into_iter().collect::<Vec<_>>(),
+        [
+            MediaType::APPLICATION_PDF.into(),
+            MediaRange::from_static("image/*")
+        ]
+    );
+    // A wildcard replaces the members it covers and takes its own place in insertion order.
     assert_eq!(
         names(&self::set(&[
             "image/png",
@@ -71,7 +85,7 @@ fn enumerates_canonical_members_without_redundant_entries() {
             "image/jpeg",
             "image/*"
         ])),
-        ["image/*", "application/pdf"]
+        ["application/pdf", "image/*"]
     );
     assert_eq!(
         names(&self::set(&["image/*", "application/pdf", "image/png"])),
@@ -97,5 +111,8 @@ fn can_be_empty_and_extended() {
     set.extend([range("text/*")]);
     assert!(set.contains(&MediaType::TEXT_PLAIN) && set.contains(&MediaType::APPLICATION_JSON));
     assert_eq!(names(&set.clone()), ["application/json", "text/*"]);
-    assert!(format!("{set:?}").contains("application"));
+    assert_eq!(
+        format!("{set:?}"),
+        "MediaRangeSet { ranges: [MediaRange(application/json), MediaRange(text/*)] }"
+    );
 }

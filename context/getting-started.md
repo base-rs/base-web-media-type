@@ -20,7 +20,7 @@ let json = MediaType::APPLICATION_JSON.with_parameter("version", "2").unwrap();
 assert_eq!(json.to_string(), "application/json; version=2");
 ```
 
-Names are case-insensitive and stored in lowercase; parameter values keep their case. Parsing follows RFC 9110 exactly and does not trim whitespace, so trim field values first. Parsing a wildcard as a `MediaType` fails with `Error::Wildcard`.
+Names are case-insensitive and stored in lowercase; parameter values keep their case. Parsing follows RFC 9110 exactly and does not trim whitespace, so trim field values first. Parsing a wildcard as a `MediaType` fails with `MediaTypeError::Wildcard`.
 
 Constants such as `MediaType::TEXT_PLAIN` cover common types. Define others with `MediaType::from_static`, which checks its names when the constant is evaluated:
 

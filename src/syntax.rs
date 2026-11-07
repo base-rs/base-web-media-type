@@ -3,7 +3,7 @@
 
 //! The media type grammar of RFC 9110, sections 5.6 and 8.3.1.
 
-use crate::Error;
+use crate::MediaTypeError;
 use std::fmt::{self, Write as _};
 
 /// A parsed media type or range, before wildcard rules are applied. Names are lowercase.
@@ -46,7 +46,7 @@ pub(crate) fn is_quotable(character: char) -> bool {
 }
 
 /// Parse `type "/" subtype *( OWS ";" OWS [ parameter ] )`. Surrounding whitespace is not accepted; callers trim field values first.
-pub(crate) fn parse(text: &str) -> Result<Parsed, Error> {
+pub(crate) fn parse(text: &str) -> Result<Parsed, MediaTypeError> {
     let mut scanner = Scanner { text, position: 0 };
     let top_level_type = scanner.token()?;
     scanner.expect(b'/')?;
@@ -59,7 +59,7 @@ pub(crate) fn parse(text: &str) -> Result<Parsed, Error> {
         if scanner.at_end() {
             // Trailing whitespace is only permitted after a semicolon.
             if scanner.position != before {
-                return Err(Error::Syntax);
+                return Err(MediaTypeError::Syntax);
             }
             break;
         }
@@ -77,11 +77,11 @@ pub(crate) fn parse(text: &str) -> Result<Parsed, Error> {
             scanner.token()?.to_owned()
         };
         if parameters.iter().any(|(existing, _)| *existing == name) {
-            return Err(Error::DuplicateParameter);
+            return Err(MediaTypeError::DuplicateParameter);
         }
         // Checking each new name against the earlier ones is quadratic, so bound the count before it grows.
-        if parameters.len() == crate::MediaRange::MAX_PARAMETERS {
-            return Err(Error::TooManyParameters);
+        if parameters.len() == crate::MediaRange::PARAMETER_COUNT_LIMIT {
+            return Err(MediaTypeError::TooManyParameters);
         }
         parameters.push((name, value));
     }
@@ -121,9 +121,9 @@ impl<'a> Scanner<'a> {
         self.text.as_bytes().get(self.position).copied()
     }
 
-    fn expect(&mut self, byte: u8) -> Result<(), Error> {
+    fn expect(&mut self, byte: u8) -> Result<(), MediaTypeError> {
         if self.peek() != Some(byte) {
-            return Err(Error::Syntax);
+            return Err(MediaTypeError::Syntax);
         }
         self.position += 1;
         Ok(())
@@ -135,19 +135,19 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn token(&mut self) -> Result<&'a str, Error> {
+    fn token(&mut self) -> Result<&'a str, MediaTypeError> {
         let start = self.position;
         while self.peek().is_some_and(is_token_byte) {
             self.position += 1;
         }
         if self.position == start {
-            return Err(Error::Syntax);
+            return Err(MediaTypeError::Syntax);
         }
         Ok(&self.text[start..self.position])
     }
 
     /// `DQUOTE *( qdtext / quoted-pair ) DQUOTE`, returning the unescaped value, when the caller has seen the opening quote. Control characters other than tab, including line breaks, are rejected.
-    fn quoted_string(&mut self) -> Result<String, Error> {
+    fn quoted_string(&mut self) -> Result<String, MediaTypeError> {
         self.position += 1;
         let mut value = String::new();
         let mut characters = self.text[self.position..].char_indices();
@@ -159,13 +159,13 @@ impl<'a> Scanner<'a> {
                 }
                 '\\' => match characters.next() {
                     Some((_, escaped)) if is_quotable(escaped) => value.push(escaped),
-                    Some(_) => return Err(Error::ParameterValue),
-                    None => return Err(Error::Syntax),
+                    Some(_) => return Err(MediaTypeError::ParameterValue),
+                    None => return Err(MediaTypeError::Syntax),
                 },
                 character if is_quotable(character) => value.push(character),
-                _ => return Err(Error::ParameterValue),
+                _ => return Err(MediaTypeError::ParameterValue),
             }
         }
-        Err(Error::Syntax)
+        Err(MediaTypeError::Syntax)
     }
 }

@@ -100,5 +100,26 @@ fn an_empty_map_matches_nothing() {
     assert_eq!(map.get(MediaRange::ANY), None::<&u8>);
     map.extend([(MediaType::IMAGE_PNG, 1)]);
     assert_eq!(map.get(MediaRange::ANY), Some(&1));
-    assert!(format!("{:?}", map.clone()).contains("image"));
+    assert_eq!(format!("{:?}", map.clone()), "{MediaType(image/png): 1}");
+}
+
+#[test]
+fn borrowed_maps_iterate_in_registration_order() {
+    let map = map();
+    let mut iterator = (&map).into_iter();
+    assert_eq!(iterator.len(), 3);
+    assert_eq!(
+        iterator.next(),
+        Some((&MediaType::APPLICATION_JSON, &"json"))
+    );
+    assert_eq!(iterator.size_hint(), (2, Some(2)));
+    let values: Vec<_> = iterator.clone().map(|(_, value)| *value).collect();
+    assert_eq!(values, ["html", "plain"]);
+    assert!(format!("{iterator:?}").starts_with("MediaTypeMapIter"));
+    let mut count = 0;
+    for (media_type, _) in &map {
+        assert!(media_type.as_range().is_concrete());
+        count += 1;
+    }
+    assert_eq!(count, 3);
 }

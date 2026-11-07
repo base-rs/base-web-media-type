@@ -4,20 +4,20 @@ This guide explains how to look up registered media types with `base-web-media-t
 
 ## Looking up types
 
-The registry maps media type names, filename extensions, and paths to records. Each record has its `MediaType`, the MIME content transfer encoding conventionally used for it, and its known extensions:
+The registry maps media type names, filename extensions, and paths to `MediaTypeRecord` values. Each record has its `MediaType`, the MIME content transfer encoding conventionally used for it, and its known extensions:
 
 ```rust
 use base_web_media_type::MediaType;
 use base_web_media_type_registry as registry;
 
-let html = registry::for_path("site/index.html").expect("a registered extension");
+let html = registry::by_path("site/index.html").expect("a registered extension");
 assert_eq!(html.media_type(), &MediaType::TEXT_HTML);
 
-let json = registry::get("application/json").expect("a registered type");
+let json = registry::by_name("application/json").expect("a registered type");
 assert_eq!(json.extensions(), ["json", "map"]);
 ```
 
-Lookups are case-insensitive and use static tables, without allocating. `for_extension` accepts an extension with or without one leading dot. `for_path` uses the final extension only, so look up compound extensions such as `warc.gz` with `for_extension`. When several types list an extension, the one ranked most common is returned.
+Lookups are case-insensitive and use static tables, without allocating. `by_extension` accepts an extension with or without one leading dot. `by_path` uses the final extension only, so look up compound extensions such as `warc.gz` with `by_extension`. When several types list an extension, the one ranked most common is returned.
 
 The registry describes conventions, not the content of a file: never trust a type derived from an untrusted filename for security decisions, such as whether content may be rendered inline.
 

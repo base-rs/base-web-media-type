@@ -1,7 +1,7 @@
 // Released under the MIT License.
 // Copyright, 2026, by Samuel Williams.
 
-use crate::{Error, syntax};
+use crate::{MediaTypeError, syntax};
 use std::borrow::Cow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -14,7 +14,7 @@ const WILDCARD: &str = "*";
 /// Type and subtype names and parameter names are case-insensitive, so they are stored in lowercase. Parameter values keep their case and order. A wildcard is a component that is exactly `*`; a `*` inside a name, as in `text/*+json`, is an ordinary token character.
 ///
 /// Equality compares names and parameters, ignoring parameter order. Matching with [`Self::matches`] ignores parameters.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MediaRange {
     /// `type/subtype` in lowercase.
     essence: Cow<'static, str>,
@@ -28,12 +28,12 @@ impl MediaRange {
     pub const ANY: Self = Self::from_static("*/*");
 
     /// The most parameters a range can have. Real media types have a handful; the limit bounds the work that parsing, comparing, and hashing untrusted input can cause.
-    pub const MAX_PARAMETERS: usize = 64;
+    pub const PARAMETER_COUNT_LIMIT: usize = 64;
 
     /// Parse a media range, such as `text/*; charset=utf-8`.
     ///
-    /// The text must follow RFC 9110's `media-type` grammar exactly, without surrounding whitespace. Parameter values may be tokens or quoted strings, and empty parameters such as a trailing `;` are permitted. A wildcard type requires a wildcard subtype, a parameter name may appear only once, and there may be at most [`Self::MAX_PARAMETERS`] parameters.
-    pub fn parse(text: &str) -> Result<Self, Error> {
+    /// The text must follow RFC 9110's `media-type` grammar exactly, without surrounding whitespace. Parameter values may be tokens or quoted strings, and empty parameters such as a trailing `;` are permitted. A wildcard type requires a wildcard subtype, a parameter name may appear only once, and there may be at most [`Self::PARAMETER_COUNT_LIMIT`] parameters.
+    pub fn parse(text: &str) -> Result<Self, MediaTypeError> {
         let parsed = syntax::parse(text)?;
         let range = Self {
             essence: Cow::Owned(parsed.essence),
@@ -45,9 +45,9 @@ impl MediaRange {
     }
 
     /// A media range without parameters. Names must be tokens and are converted to lowercase.
-    pub fn new(top_level_type: &str, subtype: &str) -> Result<Self, Error> {
+    pub fn new(top_level_type: &str, subtype: &str) -> Result<Self, MediaTypeError> {
         if !syntax::is_token(top_level_type) || !syntax::is_token(subtype) {
-            return Err(Error::Syntax);
+            return Err(MediaTypeError::Syntax);
         }
         let range = Self::from_parts(
             &top_level_type.to_ascii_lowercase(),
@@ -90,12 +90,12 @@ impl MediaRange {
     }
 
     /// Add a parameter. The name must be a token and is converted to lowercase; the value can be any text without control characters other than tab.
-    pub fn with_parameter(mut self, name: &str, value: &str) -> Result<Self, Error> {
+    pub fn with_parameter(mut self, name: &str, value: &str) -> Result<Self, MediaTypeError> {
         if !syntax::is_token(name) {
-            return Err(Error::Syntax);
+            return Err(MediaTypeError::Syntax);
         }
         if !value.chars().all(syntax::is_quotable) {
-            return Err(Error::ParameterValue);
+            return Err(MediaTypeError::ParameterValue);
         }
         let name = name.to_ascii_lowercase();
         if self
@@ -103,10 +103,10 @@ impl MediaRange {
             .iter()
             .any(|(existing, _)| *existing == name)
         {
-            return Err(Error::DuplicateParameter);
+            return Err(MediaTypeError::DuplicateParameter);
         }
-        if self.parameters.len() == Self::MAX_PARAMETERS {
-            return Err(Error::TooManyParameters);
+        if self.parameters.len() == Self::PARAMETER_COUNT_LIMIT {
+            return Err(MediaTypeError::TooManyParameters);
         }
         self.parameters.push((name, value.to_owned()));
         Ok(self)
@@ -180,9 +180,9 @@ impl MediaRange {
         self.subtype() == WILDCARD
     }
 
-    fn check_wildcards(&self) -> Result<(), Error> {
+    fn check_wildcards(&self) -> Result<(), MediaTypeError> {
         if self.is_wildcard_type() && !self.is_wildcard_subtype() {
-            return Err(Error::Wildcard);
+            return Err(MediaTypeError::Wildcard);
         }
         Ok(())
     }
@@ -210,6 +210,16 @@ const fn is_static_name(bytes: &[u8]) -> bool {
     true
 }
 
+impl fmt::Debug for MediaRange {
+    /// Shows the media range as it would be written, such as `MediaRange(text/*; charset=utf-8)`.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("MediaRange")
+            .field(&format_args!("{self}"))
+            .finish()
+    }
+}
+
 impl AsRef<MediaRange> for MediaRange {
     fn as_ref(&self) -> &MediaRange {
         self
@@ -217,9 +227,9 @@ impl AsRef<MediaRange> for MediaRange {
 }
 
 impl FromStr for MediaRange {
-    type Err = Error;
+    type Err = MediaTypeError;
 
-    fn from_str(text: &str) -> Result<Self, Error> {
+    fn from_str(text: &str) -> Result<Self, MediaTypeError> {
         Self::parse(text)
     }
 }
@@ -238,7 +248,7 @@ impl fmt::Display for MediaRange {
 
 impl PartialEq for MediaRange {
     fn eq(&self, other: &Self) -> bool {
-        // Parameter names are unique and there are at most `MAX_PARAMETERS`, so this comparison is bounded.
+        // Parameter names are unique and there are at most `PARAMETER_COUNT_LIMIT`, so this comparison is bounded.
         self.essence == other.essence
             && self.parameters.len() == other.parameters.len()
             && self
