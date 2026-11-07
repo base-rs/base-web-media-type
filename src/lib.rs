@@ -27,7 +27,7 @@ mod media_type_map;
 mod syntax;
 
 pub use media_range::MediaRange;
-pub use media_range_set::MediaRangeSet;
+pub use media_range_set::{MediaRangeSet, MediaRangeSetIter};
 pub use media_type::MediaType;
 pub use media_type_error::MediaTypeError;
 pub use media_type_map::{MediaTypeMap, MediaTypeMapIter};
